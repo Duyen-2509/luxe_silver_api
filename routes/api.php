@@ -6,74 +6,88 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\HoaDonController;
+use App\Http\Controllers\BinhLuanController;
+use App\Http\Controllers\ThongKeController;
+use App\Http\Controllers\TienShipController;
 
+// User info (auth)
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-// API lấy danh sách khách hàng
-//Route::get('/khachHang', [UserController::class, 'getKhachHang']);
-//Đăng nhập
+// Auth
 Route::post('/login', [AuthController::class, 'login']);
-// Đăng ký
 Route::post('/register', [AuthController::class, 'register']);
-// Đăng nhập bằng Google
 Route::post('/login-google', [AuthController::class, 'loginGoogle']);
-//update thông tin người dùng
 Route::post('/update-profile', [AuthController::class, 'updateProfile']);
-// Đổi mật khẩu
 Route::post('/change-password', [AuthController::class, 'changePassword']);
-// Lấy thông tin người dùng theo ID (GET)
 Route::get('/get-user/{id}', [AuthController::class, 'getUser']);
-// Lấy thông tin người dùng theo số điện thoại (GET)
+Route::get('/nhan-vien/{id_nv}', [AuthController::class, 'getNhanVienById']);
 Route::post('/change-password-by-phone', [AuthController::class, 'changePasswordByPhone']);
-// Lấy danh sách sản phẩm
-Route::post('/add-product', [ProductController::class, 'addProduct']);
-//Sản phẩm
-Route::get('/products', [ProductController::class, 'getProducts']);
-//Chi tiết sản phẩm
-Route::get('/products/{id}', [ProductController::class, 'getProductDetail']);
-// Lấy thông tin dat_rieng
-Route::get('/dat-rieng/{id}', [ProductController::class, 'getDatRieng']);
-// Cập nhật thông tin dat_rieng
-Route::put('/dat-rieng/{id}', [ProductController::class, 'updateDatRieng']);
-// thêm voucher
-Route::post('/voucher', [VoucherController::class, 'addVoucher']);
-// Cập nhật voucher
-Route::put('/voucher/{id}', [VoucherController::class, 'updateVoucher']);
-//Lấy danh sách voucher
-Route::get('/voucher', [VoucherController::class, 'getVoucher']);
-// Lấy danh sách loại voucher
-Route::get('/loai-voucher', [VoucherController::class, 'getLoaiVoucher']);
-//Thêm nhân viên
+
+// Staff
 Route::post('/staff/add', [AuthController::class, 'addStaff']);
-// Cập nhật thông tin nhân viên
 Route::post('/staff/update', [AuthController::class, 'updateStaff']);
-// Lấy thông tin nhân viên theo ID
 Route::get('/get-staff/{id}', [AuthController::class, 'getStaff']);
-// Lấy danh sách nhân viên
 Route::get('/staff', [AuthController::class, 'getAllStaff']);
-// Xóa nhân viên
 Route::post('/staff/hide', [AuthController::class, 'hideStaff']);
-// Hiện lại nhân viên đã xóa
 Route::post('/staff/unhide', [AuthController::class, 'unhideStaff']);
-// Lấy danh sách hóa đơn
-Route::get('/hoadon', [HoaDonController::class, 'getHoaDon']);
-// Lấy chi tiết hóa đơn theo mã hóa đơn
-Route::get('/hoadon/{mahd}/chitiet', [HoaDonController::class, 'getChiTietHoaDon']);
-// Lấy danh sách trạng thái hóa đơn
-Route::get('/trangthai-hoadon', [HoaDonController::class, 'getTrangThaiHD']);
-// Thêm mới hóa đơn và chi tiết hóa đơn
-Route::post('/hoadon/add', [HoaDonController::class, 'addHoaDon']);
-// Cập nhật trạng thái hóa đơn
-Route::put('/hoadon/{mahd}/trangthai', [HoaDonController::class, 'updateTrangThai']);
-// Cập nhật nhân viên xử lý hóa đơn
-Route::put('/hoadon/{mahd}/nhanvien', [HoaDonController::class, 'updateNhanVien']);
-// Cập nhật sản phẩm
+
+// Product
+Route::post('/add-product', [ProductController::class, 'addProduct']);
+Route::get('/products', [ProductController::class, 'getProducts']);
+Route::get('/products/{id}', [ProductController::class, 'getProductDetail']);
+Route::get('/dat-rieng/{id}', [ProductController::class, 'getDatRieng']);
+Route::put('/dat-rieng/{id}', [ProductController::class, 'updateDatRieng']);
 Route::put('/products/{id}', [ProductController::class, 'updateProduct']);
-// Ẩn sản phẩm
 Route::put('/products/{id}/hide', [ProductController::class, 'hideProduct']);
-// Hiện sản phẩm ẩn
 Route::put('/products/{id}/show', [ProductController::class, 'showProduct']);
-// Thang toán bằng Stripe
+Route::put('/products/{id}/stock', [ProductController::class, 'updateStock']);
+
+// Hóa đơn
+Route::get('/hoadon', [HoaDonController::class, 'getHoaDon']);
+Route::get('/hoadon/{mahd}/chitiet', [HoaDonController::class, 'getChiTietHoaDon']);
+Route::get('/trangthai-hoadon', [HoaDonController::class, 'getTrangThaiHD']);
+Route::post('/hoadon/add', [HoaDonController::class, 'addHoaDon']);
+Route::post('/hoadon/{mahd}/da-giao', [HoaDonController::class, 'daGiaoHang']);
+Route::post('/hoadon/{mahd}/da-nhan', [HoaDonController::class, 'daNhanHang']);
+Route::post('/hoadon/{mahd}/tra-hang', [HoaDonController::class, 'traHang']);
+Route::post('/hoadon/{mahd}/huy', [HoaDonController::class, 'huyDon']);
+Route::post('/hoadon/{mahd}/huy-nv', [HoaDonController::class, 'huyDonNV']);
+Route::post('/hoadon/xu-ly-don-qua-han', [HoaDonController::class, 'xuLyDonQuaHan']);
+Route::get('/hoadon/sap-het-han', [HoaDonController::class, 'getDonSapHetHan']);
+Route::get('/hoadon/cho-tra-hang', [HoaDonController::class, 'getDonChoTraHang']);
+Route::get('/hoadon/{mahd}/kiem-tra-tra-hang', [HoaDonController::class, 'kiemTraTraHang']);
+Route::post('/hoadon/{mahd}/duyet-tra-hang', [HoaDonController::class, 'duyetTraHang']);
+Route::post('/hoadon/{mahd}/gan-nhan-vien', [HoaDonController::class, 'ganNhanVien']);
+Route::post('/hoadon/{mahd}/dang-xu-ly', [HoaDonController::class, 'dangXuLy']);
+Route::post('/hoadon/{mahd}/thu-hoi-hang', [HoaDonController::class, 'thuHoiHang']);
+Route::post('/hoadon/xu-ly-don-qua-han', [HoaDonController::class, 'xuLyDonQuaHan']);
+// Voucher
+Route::post('/voucher', [VoucherController::class, 'addVoucher']);
+Route::put('/voucher/{id}', [VoucherController::class, 'updateVoucher']);
+Route::get('/voucher', [VoucherController::class, 'getVoucher']);
+Route::get('/loai-voucher', [VoucherController::class, 'getLoaiVoucher']);
+Route::post('/voucher/hide/{id}', [VoucherController::class, 'hideVoucher']);
+Route::post('/voucher/use/{id}', [VoucherController::class, 'useVoucher']);
+Route::post('/voucher/show/{id}', [VoucherController::class, 'showVoucher']);
+
+// Bình luận
+Route::post('/binhluan', [BinhLuanController::class, 'danhGia']);
+Route::put('/binhluan/{id_bl}', [BinhLuanController::class, 'suaDanhGia']);
+Route::delete('/binhluan/{id_bl}', [BinhLuanController::class, 'xoaDanhGia']);
+Route::post('/binhluan/{id_bl}/traloi', [BinhLuanController::class, 'traLoiBinhLuan']);
+Route::delete('/traloi-binhluan/{id_ctbl}', [BinhLuanController::class, 'xoaTraLoiBinhLuan']);
+Route::get('/binhluan/thongke/{id_sp}', [BinhLuanController::class, 'thongKeDanhGia']);
+Route::get('/binhluan/sanpham/{id_sp}', [BinhLuanController::class, 'getBinhLuanSanPham']);
+
+// Tính tiền ship
+
+Route::get('/tien-ship', [TienShipController::class, 'getTienShip']);
+Route::put('/tien-ship/{id}', [TienShipController::class, 'updateTienShip']);
+
+// Thống kê
+Route::get('/thongke', [ThongKeController::class, 'thongKe']);
+
+// Thanh toán Stripe
 Route::post('/stripe/create-payment-intent', [PaymentController::class, 'createPaymentIntent']);

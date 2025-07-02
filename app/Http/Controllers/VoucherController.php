@@ -90,4 +90,47 @@ class VoucherController extends Controller
         $loaiVouchers = DB::table('loai_voucher')->get();
         return response()->json(['loai_voucher' => $loaiVouchers]);
     }
+    // API ẩn voucher
+    public function hideVoucher($id)
+    {
+        $affected = DB::table('voucher')
+            ->where('id_voucher', $id)
+            ->update(['trangthai' => 0, 'updated_at' => now()]);
+
+        if ($affected) {
+            return response()->json(['message' => 'Ẩn voucher thành công']);
+        } else {
+            return response()->json(['message' => 'Không tìm thấy voucher hoặc đã ẩn'], 404);
+        }
+    }
+    // Api giảm sl
+    public function useVoucher($id)
+    {
+        $voucher = DB::table('voucher')->where('id_voucher', $id)->first();
+        if (!$voucher) {
+            return response()->json(['message' => 'Không tìm thấy voucher'], 404);
+        }
+        if ($voucher->soluong <= 0) {
+            return response()->json(['message' => 'Voucher đã hết lượt sử dụng'], 400);
+        }
+
+        DB::table('voucher')
+            ->where('id_voucher', $id)
+            ->decrement('soluong', 1);
+
+        return response()->json(['message' => 'Đã sử dụng voucher thành công']);
+    }
+    // API mở lại voucher
+    public function showVoucher($id)
+    {
+        $affected = DB::table('voucher')
+            ->where('id_voucher', $id)
+            ->update(['trangthai' => 1, 'updated_at' => now()]);
+
+        if ($affected) {
+            return response()->json(['message' => 'Đã mở lại voucher thành công']);
+        } else {
+            return response()->json(['message' => 'Không tìm thấy voucher hoặc đã mở'], 404);
+        }
+    }
 }

@@ -42,7 +42,6 @@ class ProductController extends Controller
             'gioitinh' => $request->gioitinh,
             'chatlieu' => $request->chatlieu,
             'tenpk' => $request->tenpk,
-            'soluong_kho' => $totalQuantity,
             'id_loai' => $request->id_loai,
             'mota' => $request->mota,
             'gia' => $minPrice,
@@ -108,20 +107,29 @@ class ProductController extends Controller
         $products = DB::table('sanpham')
             ->leftJoin('hinhanh', 'sanpham.id_sp', '=', 'hinhanh.id_sp')
             ->leftJoin('loai', 'sanpham.id_loai', '=', 'loai.id_loai')
+            // Subquery tổng số lượng kho
+            ->leftJoin(
+                DB::raw('(SELECT id_sp, SUM(soluong_kho) as tong_kho, SUM(soluong_daban) as tong_daban FROM chitiet_sp GROUP BY id_sp) as cts'),
+                'sanpham.id_sp',
+                '=',
+                'cts.id_sp'
+            )
             ->select(
                 'sanpham.id_sp',
                 'sanpham.tensp',
                 'sanpham.gioitinh',
                 'sanpham.chatlieu',
                 'sanpham.tenpk',
-                'sanpham.soluong_kho',
                 'sanpham.id_loai',
                 'loai.tenloai',
                 'sanpham.mota',
                 'sanpham.gia',
+                'sanpham.trangthai',
                 'sanpham.created_at',
                 'sanpham.updated_at',
-                DB::raw('MIN(hinhanh.duong_dan) as image')
+                DB::raw('MIN(hinhanh.duong_dan) as image'),
+                DB::raw('COALESCE(cts.tong_daban,0) as tong_daban'),
+                DB::raw('COALESCE(cts.tong_kho,0) as tong_kho')
             )
             ->groupBy(
                 'sanpham.id_sp',
@@ -129,14 +137,20 @@ class ProductController extends Controller
                 'sanpham.gioitinh',
                 'sanpham.chatlieu',
                 'sanpham.tenpk',
-                'sanpham.soluong_kho',
                 'sanpham.id_loai',
                 'loai.tenloai',
                 'sanpham.mota',
                 'sanpham.gia',
+                'sanpham.trangthai',
                 'sanpham.created_at',
-                'sanpham.updated_at'
+                'sanpham.updated_at',
+                'cts.tong_daban',
+                'cts.tong_kho'
             )
+            // Sản phẩm còn hàng (tong_kho > 0) lên trước, hết hàng xuống cuối
+            ->orderByDesc(DB::raw('COALESCE(cts.tong_kho,0) > 0'))
+            // Trong mỗi nhóm, sắp xếp theo lượt bán giảm dần
+            ->orderByDesc('tong_daban')
             ->orderByDesc('sanpham.created_at')
             ->get();
 
@@ -144,11 +158,22 @@ class ProductController extends Controller
             $product->image_url = $product->image
                 ? url('uploads/' . $product->image)
                 : null;
+            $product->details = DB::table('chitiet_sp')
+                ->join('size', 'chitiet_sp.id_size', '=', 'size.id_size')
+                ->select(
+                    'chitiet_sp.id_ctsp',
+                    'chitiet_sp.gia',
+                    'chitiet_sp.soluong_kho',
+                    'chitiet_sp.soluong_daban',
+                    'chitiet_sp.trangthai',
+                    'size.kichthuoc',
+                    'size.donvi'
+                )
+                ->where('chitiet_sp.id_sp', $product->id_sp)
+                ->get();
         }
 
         return response()->json(['products' => $products]);
-
-
     }
     ///API chi tiết sản phẩm
 
@@ -163,10 +188,11 @@ class ProductController extends Controller
                 'sanpham.gioitinh',
                 'sanpham.chatlieu',
                 'sanpham.tenpk',
-                'sanpham.soluong_kho',
                 'sanpham.id_loai',
+                'trangthai',
                 'loai.tenloai',
                 'sanpham.mota',
+
                 'sanpham.created_at',
                 'sanpham.updated_at'
             )
@@ -371,10 +397,19 @@ class ProductController extends Controller
                     if ($minPrice === null || $price < $minPrice)
                         $minPrice = $price;
                 }
+                // Tính lại tổng số lượng kho
+                $totalQuantity = DB::table('chitiet_sp')
+                    ->where('id_sp', $id)
+                    ->sum('soluong_kho');
+
+                // Cập nhật lại tổng số lượng kho cho sản phẩm
+                DB::table('sanpham')
+                    ->where('id_sp', $id);
+
 
                 // Cập nhật lại tổng số lượng và giá nhỏ nhất cho sản phẩm
                 DB::table('sanpham')->where('id_sp', $id)->update([
-                    'soluong_kho' => $totalQuantity,
+
                     'gia' => $minPrice ?? $product->gia,
                 ]);
             }
@@ -433,5 +468,35 @@ class ProductController extends Controller
         } else {
             return response()->json(['message' => 'Không tìm thấy sản phẩm hoặc đã hiện'], 404);
         }
+    }
+    public function updateStock(Request $request, $id)
+    {
+        $product = DB::table('sanpham')->where('id_sp', $id)->first();
+        if (!$product) {
+            return response()->json(['message' => 'Không tìm thấy sản phẩm'], 404);
+        }
+
+        // Tính tổng số lượng kho thực tế từ chitiet_sp
+        $tong_so_luong = DB::table('chitiet_sp')
+            ->where('id_sp', $id)
+            ->sum('soluong_kho');
+        $trangthai = $tong_so_luong > 0 ? 1 : 0;
+
+        DB::table('sanpham')
+            ->where('id_sp', $id)
+            ->update([
+                'trangthai' => $trangthai,
+                'updated_at' => now(),
+            ]);
+
+        // Cập nhật trạng thái cho tất cả chi tiết sản phẩm
+        DB::table('chitiet_sp')
+            ->where('id_sp', $id)
+            ->update(['trangthai' => $trangthai]);
+
+        return response()->json([
+            'message' => 'Cập nhật trạng thái tồn kho thành công',
+            'trangthai' => $trangthai
+        ]);
     }
 }

@@ -47,6 +47,9 @@ class AuthController extends Controller
         $staff = DB::table('nhan_vien')->where('sodienthoai', $sodienthoai)->first();
 
         if ($staff) {
+            if ($staff->trangthai == 0) {
+                return response()->json(['message' => 'Tài khoản đã bị khóa'], 403);
+            }
             if (!Hash::check($password, $staff->password)) {
                 return response()->json(['message' => 'Mật khẩu không đúng'], 401);
             }
@@ -56,7 +59,7 @@ class AuthController extends Controller
                 'id' => $staff->id_nv,
                 'ten' => $staff->ten,
                 'sodienthoai' => $staff->sodienthoai,
-                'email' => $staff->email,
+
                 'id_quyen' => $staff->id_quyen,
                 'ngaysinh' => $staff->ngaysinh,
                 'gioitinh' => $staff->gioitinh,
@@ -282,7 +285,7 @@ class AuthController extends Controller
         $request->validate([
             'ten' => 'required|string|max:225',
             'sodienthoai' => 'required|string|max:12|unique:nhan_vien,sodienthoai',
-            'email' => 'nullable|email',
+
             'password' => 'required|string|min:6',
             'ngaysinh' => 'nullable|date',
             'gioitinh' => 'nullable|in:Nam,Nữ',
@@ -300,7 +303,7 @@ class AuthController extends Controller
         $id = DB::table('nhan_vien')->insertGetId([
             'ten' => trim(strip_tags($request->ten)),
             'sodienthoai' => trim(strip_tags($request->sodienthoai)),
-            'email' => $request->email,
+
             'password' => Hash::make($request->password),
             'id_quyen' => 2,
             'ngaysinh' => $request->ngaysinh,
@@ -322,7 +325,7 @@ class AuthController extends Controller
             'id_nv' => 'required|exists:nhan_vien,id_nv',
             'ten' => 'nullable|string|max:225',
             'sodienthoai' => 'nullable|string|max:12',
-            'email' => 'nullable|email',
+
             'ngaysinh' => 'nullable|date',
             'gioitinh' => 'nullable|in:Nam,Nữ',
             'password' => 'nullable|string|min:6',
@@ -350,8 +353,7 @@ class AuthController extends Controller
             $data['ten'] = trim(strip_tags($request->ten));
         if ($request->filled('sodienthoai'))
             $data['sodienthoai'] = trim(strip_tags($request->sodienthoai));
-        if ($request->filled('email'))
-            $data['email'] = $request->email;
+
         if ($request->filled('ngaysinh'))
             $data['ngaysinh'] = $request->ngaysinh;
         if ($request->filled('gioitinh'))
@@ -385,7 +387,7 @@ class AuthController extends Controller
             'id' => $staff->id_nv,
             'ten' => $staff->ten,
             'sodienthoai' => $staff->sodienthoai,
-            'email' => $staff->email,
+
             'diachi' => $staff->diachi,
             'id_quyen' => $staff->id_quyen,
             'ngaysinh' => $staff->ngaysinh,
@@ -433,5 +435,28 @@ class AuthController extends Controller
         ]);
 
         return response()->json(['message' => 'Mở lại tài khoản nhân viên thành công']);
+    }
+
+    //  Lấy thông tin nhân viên theo id_nv
+    public function getNhanVienById($id_nv)
+    {
+        $staff = DB::table('nhan_vien')->where('id_nv', $id_nv)->first();
+
+        if (!$staff) {
+            return response()->json(['message' => 'Không tìm thấy nhân viên'], 404);
+        }
+
+        return response()->json([
+            'id_nv' => $staff->id_nv,
+            'ten' => $staff->ten,
+            'sodienthoai' => $staff->sodienthoai,
+            'diachi' => $staff->diachi,
+            'id_quyen' => $staff->id_quyen,
+            'ngaysinh' => $staff->ngaysinh,
+            'gioitinh' => $staff->gioitinh,
+            'trangthai' => $staff->trangthai,
+            'created_at' => $staff->created_at,
+            'updated_at' => $staff->updated_at,
+        ]);
     }
 }

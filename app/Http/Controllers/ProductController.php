@@ -346,8 +346,7 @@ class ProductController extends Controller
                     if (!in_array($id_ctsp, $ctspHasOrder)) {
                         DB::table('chitiet_sp')->where('id_ctsp', $id_ctsp)->delete();
                     } else {
-                        // Nếu đã có hóa đơn, chỉ cập nhật lại số lượng và giá nếu size trùng
-                        // hoặc giữ nguyên, không xóa
+                        
                     }
                 }
 

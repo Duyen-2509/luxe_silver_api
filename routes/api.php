@@ -9,6 +9,8 @@ use App\Http\Controllers\HoaDonController;
 use App\Http\Controllers\BinhLuanController;
 use App\Http\Controllers\ThongKeController;
 use App\Http\Controllers\TienShipController;
+use App\Http\Controllers\ThongBaoController;
+use App\Http\Controllers\PaymentController;
 
 // User info (auth)
 Route::get('/user', function (Request $request) {
@@ -50,6 +52,7 @@ Route::get('/hoadon/{mahd}/chitiet', [HoaDonController::class, 'getChiTietHoaDon
 Route::get('/trangthai-hoadon', [HoaDonController::class, 'getTrangThaiHD']);
 Route::post('/hoadon/add', [HoaDonController::class, 'addHoaDon']);
 Route::post('/hoadon/{mahd}/da-giao', [HoaDonController::class, 'daGiaoHang']);
+Route::post('/hoadon/{mahd}/da-giao-toi', [HoaDonController::class, 'daGiaoToi']);
 Route::post('/hoadon/{mahd}/da-nhan', [HoaDonController::class, 'daNhanHang']);
 Route::post('/hoadon/{mahd}/tra-hang', [HoaDonController::class, 'traHang']);
 Route::post('/hoadon/{mahd}/huy', [HoaDonController::class, 'huyDon']);
@@ -88,6 +91,11 @@ Route::put('/tien-ship/{id}', [TienShipController::class, 'updateTienShip']);
 
 // Thống kê
 Route::get('/thongke', [ThongKeController::class, 'thongKe']);
+
+//Thông báo
+Route::get('/thong-bao/khach/{id_kh}', [ThongBaoController::class, 'getThongBaoKhach']);
+Route::get('/thong-bao/nhanvien/{id_nv}', [ThongBaoController::class, 'getThongBaoNhanVien']);
+Route::post('/thong-bao/danh-dau-da-doc', [ThongBaoController::class, 'danhDauDaDoc']);
 
 // Thanh toán Stripe
 Route::post('/stripe/create-payment-intent', [PaymentController::class, 'createPaymentIntent']);

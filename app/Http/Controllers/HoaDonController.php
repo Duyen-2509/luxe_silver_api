@@ -145,7 +145,31 @@ class HoaDonController extends Controller
                     ->where('mahd', $mahd)
                     ->update(['diem_sudung' => $request->used_points]);
             }
+
         }
+        // Gửi thông báo cho tất cả nhân viên (đơn hàng mới)
+        $nhanViens = DB::table('nhan_vien')->pluck('id_nv');
+        foreach ($nhanViens as $id_nv) {
+            DB::table('thong_bao')->insert([
+                'tieu_de' => 'Đơn hàng mới',
+                'noi_dung' => 'Khách hàng vừa đặt đơn hàng #' . $mahd,
+                'id_loai_tb' => 1, // 1 = Đơn hàng mới
+                'id_kh' => $request->id_kh,
+                'id_nv' => $id_nv,
+                'mahd' => $mahd,
+                'created_at' => now(),
+            ]);
+        }
+        // Gửi thông báo cho khách (chờ xác nhận)
+        DB::table('thong_bao')->insert([
+            'tieu_de' => 'Đặt hàng thành công',
+            'noi_dung' => 'Đơn hàng #' . $mahd . ' của bạn đã được đặt thành công và đang chờ xác nhận.',
+            'id_loai_tb' => 2, // 2 = Cập nhật trạng thái đơn hàng
+            'id_kh' => $request->id_kh,
+            'id_nv' => null,
+            'mahd' => $mahd,
+            'created_at' => now(),
+        ]);
 
         return response()->json(['message' => 'Tạo hóa đơn thành công', 'mahd' => $mahd]);
     }
@@ -155,7 +179,7 @@ class HoaDonController extends Controller
     {
         $data = [
             'id_ttdh' => 3,
-            'trangthai' => 2,
+            'trangthai' => 1, // Đang giao, trạng thái 1
             'updated_at' => now(),
         ];
         if ($request->filled('id_nv')) {
@@ -163,10 +187,51 @@ class HoaDonController extends Controller
         }
         DB::table('hoadon')->where('mahd', $mahd)->update($data);
         DB::table('chitiet_hd')->where('mahd', $mahd)->update([
-            'trangthai' => 2,
+            'trangthai' => 1, // Đang giao, trạng thái 1
             'updated_at' => now(),
         ]);
+        $hoadon = DB::table('hoadon')->where('mahd', $mahd)->first();
+        if ($hoadon && $hoadon->id_kh) {
+            DB::table('thong_bao')->insert([
+                'tieu_de' => 'Cập nhật trạng thái đơn hàng',
+                'noi_dung' => 'Đơn hàng #' . $mahd . ' đã được giao cho đơn vị vận chuyển.',
+                'id_loai_tb' => 2, // 2 = Cập nhật trạng thái đơn hàng
+                'id_kh' => $hoadon->id_kh,
+                'mahd' => $mahd,
+                'created_at' => now(),
+            ]);
+        }
         return response()->json(['message' => 'Đã cập nhật trạng thái ĐANG GIAO cho đơn hàng']);
+    }
+
+    // Nhân viên bấm "Đã giao tới khách"
+    public function daGiaoToi(Request $request, $mahd)
+    {
+        $data = [
+            'id_ttdh' => 3,
+            'trangthai' => 2, // Đang giao, trạng thái 2
+            'updated_at' => now(),
+        ];
+        if ($request->filled('id_nv')) {
+            $data['id_nv'] = $request->id_nv;
+        }
+        DB::table('hoadon')->where('mahd', $mahd)->update($data);
+        DB::table('chitiet_hd')->where('mahd', $mahd)->update([
+            'trangthai' => 2, // Đang giao, trạng thái 2
+            'updated_at' => now(),
+        ]);
+        $hoadon = DB::table('hoadon')->where('mahd', $mahd)->first();
+        if ($hoadon && $hoadon->id_kh) {
+            DB::table('thong_bao')->insert([
+                'tieu_de' => 'Cập nhật trạng thái đơn hàng',
+                'noi_dung' => 'Đơn hàng #' . $mahd . ' đã được giao tới khách.',
+                'id_loai_tb' => 2, // 2 = Cập nhật trạng thái đơn hàng
+                'id_kh' => $hoadon->id_kh,
+                'mahd' => $mahd,
+                'created_at' => now(),
+            ]);
+        }
+        return response()->json(['message' => 'Đã cập nhật trạng thái ĐÃ GIAO TỚI cho đơn hàng']);
     }
 
     // Khách bấm "Đã nhận hàng"
@@ -192,6 +257,15 @@ class HoaDonController extends Controller
             DB::table('khach_hang')
                 ->where('id_kh', $hoadon->id_kh)
                 ->increment('diem', $diemCong);
+            DB::table('thong_bao')->insert([
+                'tieu_de' => 'Cập nhật trạng thái đơn hàng',
+                'noi_dung' => 'Đơn hàng #' . $mahd . ' đã được xác nhận ĐÃ NHẬN.',
+                'id_loai_tb' => 2,
+                'id_kh' => $hoadon->id_kh,
+                'id_nv' => null,
+                'mahd' => $mahd,
+                'created_at' => now(),
+            ]);
         }
         return response()->json(['message' => 'Đã cập nhật trạng thái ĐÃ NHẬN cho đơn hàng']);
     }
@@ -206,13 +280,6 @@ class HoaDonController extends Controller
         $order = DB::table('hoadon')->where('mahd', $mahd)->first();
         if (!$order) {
             return response()->json(['success' => false, 'message' => 'Không tìm thấy đơn hàng'], 404);
-        }
-
-        if (!(($order->id_ttdh == 3 && $order->trangthai == 2) || ($order->id_ttdh == 4 && $order->trangthai == 1))) {
-            return response()->json(['success' => false, 'message' => 'Chỉ có thể trả hàng khi đơn đã giao hoặc đã nhận'], 400);
-        }
-        if (now()->diffInDays($order->updated_at) > 7) {
-            return response()->json(['success' => false, 'message' => 'Đã quá thời hạn trả hàng (7 ngày)'], 400);
         }
 
         $currentTime = now();
@@ -230,6 +297,19 @@ class HoaDonController extends Controller
             'trangthai' => 3,
             'updated_at' => $currentTime,
         ]);
+        $nhanViens = DB::table('nhan_vien')->pluck('id_nv');
+        foreach ($nhanViens as $id_nv) {
+            DB::table('thong_bao')->insert([
+                'tieu_de' => 'Khách hàng yêu cầu trả hàng',
+                'noi_dung' => 'Khách hàng đã gửi yêu cầu trả hàng cho đơn #' . $mahd . '. Lý do: ' . $request->ly_do_kh,
+                'id_loai_tb' => 7, // 7 = Khách trả hàng
+                'id_nv' => $id_nv,
+                'id_kh' => $order->id_kh,
+                'mahd' => $mahd,
+                'ly_do' => $request->ly_do_kh,
+                'created_at' => now(),
+            ]);
+        }
         return response()->json(['success' => true, 'message' => 'Đã gửi yêu cầu trả hàng thành công. Vui lòng chờ nhân viên xử lý.']);
     }
 
@@ -272,6 +352,19 @@ class HoaDonController extends Controller
             'trangthai' => 1,
             'updated_at' => $currentTime,
         ]);
+        $nhanViens = DB::table('nhan_vien')->pluck('id_nv');
+        foreach ($nhanViens as $id_nv) {
+            DB::table('thong_bao')->insert([
+                'tieu_de' => 'Khách hàng hủy đơn',
+                'noi_dung' => 'Khách hàng đã hủy đơn hàng #' . $mahd . '. Lý do: ' . $request->ly_do_kh,
+                'id_loai_tb' => 5, // 5 = Khách hủy đơn
+                'id_nv' => $id_nv,
+                'id_kh' => $order->id_kh,
+                'mahd' => $mahd,
+                'ly_do' => $request->ly_do_kh,
+                'created_at' => now(),
+            ]);
+        }
         return response()->json(['success' => true, 'message' => 'Đã hủy đơn hàng']);
     }
 
@@ -317,7 +410,15 @@ class HoaDonController extends Controller
                 'trangthai' => 1,
                 'updated_at' => $currentTime,
             ]);
-            // ...hoàn trả kho...
+            DB::table('thong_bao')->insert([
+                'tieu_de' => 'Duyệt trả hàng',
+                'noi_dung' => 'Đơn hàng #' . $mahd . ' đã được duyệt trả hàng.',
+                'id_loai_tb' => 8, // 8 = Duyệt trả hàng
+                'id_kh' => $order->id_kh,
+                'id_nv' => $request->id_nv,
+                'mahd' => $mahd,
+                'created_at' => now(),
+            ]);
             return response()->json(['success' => true, 'message' => 'Đã duyệt trả hàng thành công. Số lượng sản phẩm đã được hoàn trả về kho.']);
         } else {
             // Không duyệt
@@ -333,10 +434,20 @@ class HoaDonController extends Controller
                 'trangthai' => 1,
                 'updated_at' => $currentTime,
             ]);
+            DB::table('thong_bao')->insert([
+                'tieu_de' => 'Không duyệt trả hàng',
+                'noi_dung' => 'Đơn hàng #' . $mahd . ' không được duyệt trả hàng. Lý do: ' . $request->ly_do_nv,
+                'id_loai_tb' => 9, // 9 = Từ chối trả hàng
+                'id_kh' => $order->id_kh,
+                'id_nv' => $request->id_nv,
+                'mahd' => $mahd,
+                'ly_do' => $request->ly_do_nv,
+                'created_at' => now(),
+            ]);
             return response()->json(['success' => true, 'message' => 'Đã từ chối yêu cầu trả hàng. Đơn hàng chuyển về trạng thái "Đã nhận".']);
         }
     }
-    // Nhân viên hủy đơn (khi chờ xác nhận hoặc đang xử lý)
+    // Nhân viên hủy đơn
     public function huyDonNV(Request $request, $mahd)
     {
         $request->validate([
@@ -374,6 +485,16 @@ class HoaDonController extends Controller
         DB::table('chitiet_hd')->where('mahd', $mahd)->update([
             'trangthai' => 1,
             'updated_at' => $currentTime,
+        ]);
+        DB::table('thong_bao')->insert([
+            'tieu_de' => 'Đơn hàng bị hủy',
+            'noi_dung' => 'Đơn hàng #' . $mahd . ' đã bị nhân viên hủy. Lý do: ' . $request->ly_do_nv,
+            'id_loai_tb' => 6, // 6 = Nhân viên hủy đơn
+            'id_kh' => $order->id_kh,
+            'id_nv' => $request->id_nv,
+            'mahd' => $mahd,
+            'ly_do' => $request->ly_do_nv,
+            'created_at' => now(),
         ]);
         return response()->json(['success' => true, 'message' => 'Nhân viên đã hủy đơn hàng']);
     }
@@ -463,7 +584,8 @@ class HoaDonController extends Controller
                 'diff' => $diff,
                 'mahd' => $order->mahd
             ]);
-            if ($diff > 2) {
+            // test 1p
+            if ($diff > 1) {
                 DB::table('hoadon')
                     ->where('mahd', $order->mahd)
                     ->update([

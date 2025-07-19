@@ -69,6 +69,18 @@ class BinhLuanController extends Controller
             'trangthai' => 1,
             'created_at' => now(),
         ]);
+        $nhanViens = DB::table('nhan_vien')->pluck('id_nv');
+        foreach ($nhanViens as $id_nv) {
+            DB::table('thong_bao')->insert([
+                'tieu_de' => 'Đánh giá mới',
+                'noi_dung' => 'Khách hàng vừa đánh giá sản phẩm #' . $request->id_sp,
+                'id_loai_tb' => 3, // 3 = Khách hàng đánh giá
+                'id_nv' => $id_nv,
+                'id_kh' => $request->id_kh,
+                'mahd' => $request->mahd,
+                'created_at' => now(),
+            ]);
+        }
 
         return response()->json(['message' => 'Đánh giá thành công']);
     }
@@ -216,7 +228,17 @@ class BinhLuanController extends Controller
             'ten_nhan_vien' => $ten_nhan_vien,
             'updated_at' => now(),
         ]);
-
+        $id_kh = DB::table('binhluan')->where('id_bl', $id_bl)->value('id_kh');
+        $mahd = DB::table('binhluan')->where('id_bl', $id_bl)->value('mahd'); // Thêm dòng này
+        DB::table('thong_bao')->insert([
+            'tieu_de' => 'Phản hồi bình luận',
+            'noi_dung' => 'Nhân viên đã phản hồi bình luận của bạn về sản phẩm #' . $request->id_sp,
+            'id_loai_tb' => 4, // 4 = Shop trả lời đánh giá
+            'id_kh' => $id_kh,
+            'id_nv' => null,
+            'mahd' => $mahd, // Đã có giá trị
+            'created_at' => now(),
+        ]);
         return response()->json([
             'message' => 'Đã trả lời bình luận',
             'ten_nhan_vien' => $ten_nhan_vien,

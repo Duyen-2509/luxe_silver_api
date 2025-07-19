@@ -10,11 +10,7 @@ use Illuminate\Support\Arr;
 
 class AuthController extends Controller
 {
-    /**
-     * Đăng nhập cho khách hàng hoặc nhân viên
-     * Nếu tìm thấy trong bảng khách_hang thì trả về thông tin khách hàng
-     * Nếu không, tìm trong bảng nhan_vien, nếu đúng trả về thông tin nhân viên
-     */
+
     public function login(Request $request)
     {
         $request->validate([
@@ -24,6 +20,8 @@ class AuthController extends Controller
 
         $sodienthoai = trim(strip_tags($request->sodienthoai));
         $password = $request->password;
+        // Tự động phát sinh token mới mỗi lần đăng nhập
+        $token = bin2hex(random_bytes(32));
 
         // 1. Kiểm tra khách hàng
         $user = DB::table('khach_hang')->where('sodienthoai', $sodienthoai)->first();
@@ -32,6 +30,8 @@ class AuthController extends Controller
             if (!Hash::check($password, $user->password)) {
                 return response()->json(['message' => 'Mật khẩu không đúng'], 401);
             }
+            // Lưu token mới
+            DB::table('khach_hang')->where('id_kh', $user->id_kh)->update(['token' => $token]);
             return response()->json([
                 'role' => 'khach_hang',
                 'id' => $user->id_kh,
@@ -40,6 +40,7 @@ class AuthController extends Controller
                 'diem' => $user->diem,
                 'ngaysinh' => $user->ngaysinh,
                 'gioitinh' => $user->gioitinh,
+                'token' => $token,
             ]);
         }
 
@@ -53,16 +54,18 @@ class AuthController extends Controller
             if (!Hash::check($password, $staff->password)) {
                 return response()->json(['message' => 'Mật khẩu không đúng'], 401);
             }
+            // Lưu token mới
+            DB::table('nhan_vien')->where('id_nv', $staff->id_nv)->update(['token' => $token]);
             $role = $staff->id_quyen == 1 ? 'admin' : 'nhan_vien';
             return response()->json([
                 'role' => $role,
                 'id' => $staff->id_nv,
                 'ten' => $staff->ten,
                 'sodienthoai' => $staff->sodienthoai,
-
                 'id_quyen' => $staff->id_quyen,
                 'ngaysinh' => $staff->ngaysinh,
                 'gioitinh' => $staff->gioitinh,
+                'token' => $token,
             ]);
         }
 
@@ -70,10 +73,7 @@ class AuthController extends Controller
         return response()->json(['message' => 'Số điện thoại không tồn tại'], 404);
     }
 
-    /**
-     * Đăng ký khách hàng mới
-     * Chỉ cho phép đăng ký với bảng khách_hang
-     */
+    // dăng ký
     public function register(Request $request)
     {
         $request->validate([
@@ -85,13 +85,13 @@ class AuthController extends Controller
         $ten = trim(strip_tags($request->ten));
         $sodienthoai = trim(strip_tags($request->sodienthoai));
 
-        // // Kiểm tra số điện thoại đã tồn tại bên bảng nhan_vien chưa
-        // $existsInNhanVien = DB::table('nhan_vien')->where('sodienthoai', $sodienthoai)->exists();
-        // if ($existsInNhanVien) {
-        //     return response()->json([
-        //         'message' => 'Số điện thoại đã tồn tại'
-        //     ], 422);
-        // }
+        // Kiểm tra số điện thoại đã tồn tại bên bảng nhan_vien chưa
+        $existsInNhanVien = DB::table('nhan_vien')->where('sodienthoai', $sodienthoai)->exists();
+        if ($existsInNhanVien) {
+            return response()->json([
+                'message' => 'Số điện thoại đã tồn tại'
+            ], 422);
+        }
 
         $password = Hash::make($request->password);
 
@@ -121,11 +121,14 @@ class AuthController extends Controller
             'sodienthoai' => 'nullable|string',
         ]);
 
+        // Tự động phát sinh token mới mỗi lần đăng nhập bằng Google
+        $token = bin2hex(random_bytes(32));
         // Kiểm tra user đã tồn tại chưa
         $user = DB::table('khach_hang')->where('email', $request->email)->first();
 
         if ($user) {
-            // Đã có user, trả về thông tin
+            // Đã có user, cập nhật token mới
+            DB::table('khach_hang')->where('id_kh', $user->id_kh)->update(['token' => $token]);
             return response()->json([
                 'role' => 'khach_hang',
                 'id' => $user->id_kh,
@@ -135,6 +138,7 @@ class AuthController extends Controller
                 'diem' => $user->diem,
                 'ngaysinh' => $user->ngaysinh,
                 'gioitinh' => $user->gioitinh,
+                'token' => $token,
             ]);
         } else {
             // Chưa có user, tạo mới
@@ -146,6 +150,7 @@ class AuthController extends Controller
                 'ngaysinh' => now(),
                 'created_at' => now(),
                 'updated_at' => now(),
+                'token' => $token,
             ]);
             return response()->json([
                 'role' => 'khach_hang',
@@ -156,13 +161,11 @@ class AuthController extends Controller
                 'diem' => 0,
                 'ngaysinh' => now(),
                 'gioitinh' => null,
+                'token' => $token,
             ]);
         }
     }
-    /**
-     * Cập nhật thông tin cá nhân của khách hàng
-     * Chỉ cho phép cập nhật thông tin của khách hàng đã đăng nhập
-     */
+    // cập nhật thông tin cá nhân
     public function updateProfile(Request $request)
     {
         $request->validate([
@@ -175,7 +178,21 @@ class AuthController extends Controller
             'gioitinh' => 'nullable|in:Nam,Nữ',
             'password' => 'nullable|string|min:6',
         ]);
-
+        // Kiểm tra trùng số điện thoại với khách hàng khác và nhân viên
+        if ($request->filled('sodienthoai')) {
+            $existsInKhachHang = DB::table('khach_hang')
+                ->where('sodienthoai', $request->sodienthoai)
+                ->where('id_kh', '!=', $request->id_kh)
+                ->exists();
+            $existsInNhanVien = DB::table('nhan_vien')
+                ->where('sodienthoai', $request->sodienthoai)
+                ->exists();
+            if ($existsInKhachHang || $existsInNhanVien) {
+                return response()->json([
+                    'message' => 'Số điện thoại đã tồn tại trong hệ thống'
+                ], 422);
+            }
+        }
         $data = [];
         if ($request->filled('ten'))
             $data['ten'] = trim(strip_tags($request->ten));
@@ -201,10 +218,7 @@ class AuthController extends Controller
             'data' => $data
         ]);
     }
-    /**
-     * Đổi mật khẩu cho khách hàng
-     * Yêu cầu: id_kh, mật khẩu cũ, mật khẩu mới
-     */
+    // đổi mk
     public function changePassword(Request $request)
     {
         $request->validate([
@@ -229,9 +243,9 @@ class AuthController extends Controller
 
         return response()->json(['message' => 'Đổi mật khẩu thành công']);
     }
-    /**
-     * Lấy thông tin khách hàng theo id_kh
-     */
+
+    // Lấy thông tin khách hàng theo id_kh
+
     public function getUser($id)
     {
         $user = DB::table('khach_hang')->where('id_kh', $id)->first();
@@ -253,10 +267,9 @@ class AuthController extends Controller
             'updated_at' => $user->updated_at,
         ]);
     }
-    /**
-     * Đổi mật khẩu cho khách hàng theo số điện thoại
-     * Yêu cầu: sodienthoai, mật khẩu cũ, mật khẩu mới
-     */
+
+    //Đổi mật khẩu cho khách hàng theo số điện thoại
+
     public function changePasswordByPhone(Request $request)
     {
         $request->validate([
@@ -285,14 +298,16 @@ class AuthController extends Controller
         $request->validate([
             'ten' => 'required|string|max:225',
             'sodienthoai' => 'required|string|max:12|unique:nhan_vien,sodienthoai',
-
             'password' => 'required|string|min:6',
             'ngaysinh' => 'nullable|date',
             'gioitinh' => 'nullable|in:Nam,Nữ',
             'diachi' => 'nullable|string|max:225',
+        ], [
+            'sodienthoai.unique' => 'Số điện thoại đã tồn tại trong hệ thống',
+
         ]);
 
-        // Kiểm tra số điện thoại đã tồn tại ở bảng khách_hang chưa
+        // Kiểm tra số điện thoại đã tồn tại ở bảng khách_hang ko
         $existsInKhachHang = DB::table('khach_hang')->where('sodienthoai', $request->sodienthoai)->exists();
         if ($existsInKhachHang) {
             return response()->json([
@@ -324,57 +339,37 @@ class AuthController extends Controller
         $request->validate([
             'id_nv' => 'required|exists:nhan_vien,id_nv',
             'ten' => 'nullable|string|max:225',
-            'sodienthoai' => 'nullable|string|max:12',
-
+            'diachi' => 'nullable|string|max:225',
             'ngaysinh' => 'nullable|date',
             'gioitinh' => 'nullable|in:Nam,Nữ',
-            'password' => 'nullable|string|min:6',
-            'diachi' => 'nullable|string|max:225',
         ]);
-
-        // Nếu có sửa số điện thoại thì kiểm tra trùng
-        if ($request->filled('sodienthoai')) {
-            $existsInNhanVien = DB::table('nhan_vien')
-                ->where('sodienthoai', $request->sodienthoai)
-                ->where('id_nv', '!=', $request->id_nv)
-                ->exists();
-            $existsInKhachHang = DB::table('khach_hang')
-                ->where('sodienthoai', $request->sodienthoai)
-                ->exists();
-            if ($existsInNhanVien || $existsInKhachHang) {
-                return response()->json([
-                    'message' => 'Số điện thoại đã tồn tại trong hệ thống'
-                ], 422);
-            }
-        }
 
         $data = [];
         if ($request->filled('ten'))
             $data['ten'] = trim(strip_tags($request->ten));
-        if ($request->filled('sodienthoai'))
-            $data['sodienthoai'] = trim(strip_tags($request->sodienthoai));
-
+        if ($request->filled('diachi'))
+            $data['diachi'] = trim(strip_tags($request->diachi));
         if ($request->filled('ngaysinh'))
             $data['ngaysinh'] = $request->ngaysinh;
         if ($request->filled('gioitinh'))
             $data['gioitinh'] = $request->gioitinh;
-        if ($request->filled('password'))
-            $data['password'] = Hash::make($request->password);
-        if ($request->filled('diachi'))
-            $data['diachi'] = trim(strip_tags($request->diachi));
+
+        if (empty($data)) {
+            return response()->json([
+                'message' => 'Không có thông tin nào để cập nhật'
+            ], 422);
+        }
 
         $data['updated_at'] = now();
 
-        DB::table('nhan_vien')->where('id_nv', $request->id_nv)->update($data);
+        $affected = DB::table('nhan_vien')->where('id_nv', $request->id_nv)->update($data);
 
         return response()->json([
             'message' => 'Cập nhật nhân viên thành công',
             'data' => $data
         ]);
     }
-    /**
-     * Lấy thông tin nhân viên theo id_nv
-     */
+    // Lấy thông tin nhân viên theo id_nv
     public function getStaff($id)
     {
         $staff = DB::table('nhan_vien')->where('id_nv', $id)->first();
@@ -387,7 +382,6 @@ class AuthController extends Controller
             'id' => $staff->id_nv,
             'ten' => $staff->ten,
             'sodienthoai' => $staff->sodienthoai,
-
             'diachi' => $staff->diachi,
             'id_quyen' => $staff->id_quyen,
             'ngaysinh' => $staff->ngaysinh,
@@ -396,9 +390,7 @@ class AuthController extends Controller
             'updated_at' => $staff->updated_at,
         ]);
     }
-    /**
-     * Lấy danh sách tất cả nhân viên
-     */
+    // Lấy tất cả nhân viên (trừ admin)
     public function getAllStaff()
     {
         // Lấy tất cả nhân viên, loại bỏ admin (id_quyen = 1)
